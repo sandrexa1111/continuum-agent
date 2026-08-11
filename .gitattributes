@@ -1,0 +1,9 @@
+# Normalize line endings in the repository. Without this, a Windows checkout
+# commits CRLF and the CI shell scripts in .github/workflows fail with
+# "bad interpreter" style errors that are tedious to diagnose.
+* text=auto eol=lf
+
+# Binary-ish artifacts that must never be munged.
+*.asi binary
+*.png binary
+*.gif binary

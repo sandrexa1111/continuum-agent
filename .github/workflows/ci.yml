@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  quality:
+    name: lint · types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: ruff format --check src tests
+      - run: mypy src/continuum
+
+  test:
+    name: test · py${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is in the matrix on purpose: the CLI renders box-drawing
+        # characters and a cp1252 console will raise UnicodeEncodeError if the
+        # fallback in _console.py regresses. That bug shipped once already.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - { os: macos-latest, python: "3.10" }
+          - { os: macos-latest, python: "3.11" }
+          - { os: windows-latest, python: "3.11" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest --cov=continuum --cov-report=term-missing --cov-fail-under=90
+
+  first-run:
+    name: first-run experience
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Install from a built wheel rather than the source tree: this is the
+      # path a new user actually takes, and it is where packaging mistakes
+      # (missing modules, broken entry points) show up.
+      - run: pip install build && python -m build
+      - run: pip install dist/*.whl
+
+      - name: quick start from the README must work
+        run: |
+          set -euo pipefail
+          continuum --version
+          continuum adapters | grep -q native-reviewer
+          continuum demo --workspace ./demo
+          continuum history --store ./demo
+          continuum verify --store ./demo
+          continuum export after-extract agent.asi --store ./demo
+          continuum inspect agent.asi
+          continuum verify --image agent.asi
+
+      - name: a tampered image must be rejected
+        run: |
+          set -euo pipefail
+          printf 'corrupt' >> agent.asi
+          if continuum verify --image agent.asi; then
+            echo "::error::tampered image passed verification"
+            exit 1
+          fi
+          echo "tampered image correctly rejected"
+
+      - name: resume without capabilities must exit 3
+        run: |
+          set -euo pipefail
+          continuum export after-extract clean.asi --store ./demo
+          set +e
+          continuum resume clean.asi --workspace ./nowhere --grant filesystem.read
+          code=$?
+          set -e
+          test "$code" -eq 3 || { echo "::error::expected exit 3, got $code"; exit 1; }
+          echo "resume correctly refused with exit 3"
+
+  spec-links:
+    name: docs links resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every relative markdown link must point at a real file
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r -d '' file; do
+            grep -oE '\]\([^)#][^)]*\)' "$file" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' \
+            | grep -vE '^(https?|mailto):' | while read -r link; do
+                target="$(dirname "$file")/${link%%#*}"
+                if [ ! -e "$target" ]; then
+                  echo "::error file=$file::broken link -> $link"
+                  exit 1
+                fi
+              done || fail=1
+          done < <(find . -name '*.md' -not -path './.git/*' -print0)
+          test "$fail" -eq 0
