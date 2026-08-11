@@ -9,11 +9,14 @@ representation that can be snapshotted, forked, diffed, migrated between
 providers, and resumed in a different process on a different machine.
 
 ```bash
-pip install continuum-agent
+pip install git+https://github.com/sandrexa1111/continuum-agent
 continuum demo --workspace ./demo
 ```
 
 The demo runs offline. No API key, no network, no model provider.
+
+> Not on PyPI yet — the name is reserved-by-absence, not claimed. Install from
+> source until a release is published there.
 
 ---
 
@@ -161,7 +164,9 @@ credential that leaked into agent memory.
 ## Quick start
 
 ```bash
-pip install continuum-agent
+git clone https://github.com/sandrexa1111/continuum-agent
+cd continuum-agent
+pip install -e .
 ```
 
 Run the reference story, then look at what it produced:
