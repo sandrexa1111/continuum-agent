@@ -289,7 +289,7 @@ src/continuum/
 
 spec/                the format, normatively
 docs/adr/            why the load-bearing decisions went the way they did
-tests/               237 tests
+tests/               244 tests
 ```
 
 ---
@@ -326,7 +326,7 @@ migration diagnostics — are identical either way.
 
 ```bash
 pip install -e ".[dev]"
-pytest                              # 237 tests
+pytest                              # 244 tests
 ruff check src tests
 mypy src/continuum                  # strict
 pytest --cov=continuum              # 95% statement coverage

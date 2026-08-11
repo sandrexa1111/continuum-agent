@@ -49,7 +49,7 @@ First public release. Experimental.
   `store.md`, written to be implementable without reading the source.
 - **ADRs** — five records covering canonical JSON, zero dependencies, the ZIP
   container, forward compatibility, and the model-free reference runtime.
-- 237 tests, 95% statement coverage, strict mypy, CI across four Python versions
+- 244 tests, 95% statement coverage, strict mypy, CI across four Python versions
   and three operating systems.
 
 ### Known limitations
