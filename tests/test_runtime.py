@@ -10,7 +10,7 @@ import pytest
 
 from continuum.adapters.native import PLAN, NativeReviewAgent
 from continuum.errors import AdapterError, ResumeBlocked
-from continuum.model import ExecutionStatus
+from continuum.model import ExecutionStatus, fixed_clock
 from continuum.runtime import checkout, checkpoint, fork, resume
 from continuum.store import Store
 
@@ -55,9 +55,27 @@ class TestReferenceAdapter:
             assert digest_bytes((workspace / artifact.path).read_bytes()) == artifact.digest
 
     def test_is_deterministic_across_runs(self, workspace):
+        """Same corpus and same clock must produce the same content address.
+
+        The clock has to be pinned. The agent stamps ``created_at`` on memory
+        entries as it runs, so two runs that straddle a second boundary
+        legitimately differ. Without the pin this passes on a fast machine and
+        fails on a slow one -- which is exactly what it did, green on Linux and
+        Windows and red on one macOS runner.
+        """
+        with fixed_clock():
+            first = NativeReviewAgent(workspace, agent_id="r").run_to_completion()
+            second = NativeReviewAgent(workspace, agent_id="r").run_to_completion()
+        assert first.core_digest() == second.core_digest()
+
+    def test_only_timestamps_vary_between_unpinned_runs(self, workspace):
+        """Everything the agent actually decides is clock-independent."""
         first = NativeReviewAgent(workspace, agent_id="r").run_to_completion()
         second = NativeReviewAgent(workspace, agent_id="r").run_to_completion()
-        assert first.core_digest() == second.core_digest()
+
+        assert [m.content for m in first.memory] == [m.content for m in second.memory]
+        assert [a.digest for a in first.artifacts] == [a.digest for a in second.artifacts]
+        assert [e.type for e in first.events] == [e.type for e in second.events]
 
     def test_missing_corpus_is_a_clear_adapter_error(self, tmp_path):
         with pytest.raises(AdapterError, match="no corpus"):
