@@ -113,6 +113,61 @@ jobs:
           test "$code" -eq 3 || { echo "::error::expected exit 3, got $code"; exit 1; }
           echo "resume correctly refused with exit 3"
 
+  schema:
+    name: published schema is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]" jsonschema
+      # The schema in spec/ is hand-written against the prose spec, not
+      # reflected off the dataclasses. This job is what stops it drifting.
+      - run: python scripts/generate_schema.py --check
+      - run: pytest tests/test_schema.py -q
+
+  interop:
+    name: langgraph interoperability
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: install core, then the adapter package separately
+        run: |
+          pip install -e .
+          pip install -e ./packages/continuum-langgraph
+          pip install pytest
+
+      - name: core must still have no runtime dependencies of its own
+        run: |
+          python - <<'PY'
+          import importlib.metadata as md
+          requires = md.requires("continuum-agent") or []
+          hard = [r for r in requires if "extra ==" not in r]
+          assert not hard, f"continuum-agent gained runtime dependencies: {hard}"
+          print("continuum-agent runtime dependencies:", hard or "none")
+          PY
+
+      - name: the adapter is discovered without any change to core
+        run: |
+          set -euo pipefail
+          continuum adapters | tee /dev/stderr | grep -qx langgraph
+
+      - run: pytest packages/continuum-langgraph/tests -q
+
+      - name: the interoperability demonstration must run offline
+        run: python packages/continuum-langgraph/examples/interop_demo.py
+
   spec-links:
     name: docs links resolve
     runs-on: ubuntu-latest

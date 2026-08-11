@@ -1,0 +1,353 @@
+{
+  "$comment": "additionalProperties is true by design. Readers must preserve unknown top-level fields and re-emit them unchanged; see spec/compatibility.md section 2. A schema that forbade them would make every older validator reject documents it is required to round-trip.",
+  "$id": "https://github.com/sandrexa1111/continuum-agent/spec/agent-state.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "An agent's portable execution state, format version 0.1. Normative prose lives in spec/state-image.md; this schema encodes the structural rules only. Constraints it cannot express -- canonical encoding, digest agreement, artifact-graph acyclicity, event sequence ordering, and the requires/optional disjointness rule -- are stated there and enforced by AgentState.validate().",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "properties": {
+          "created_at": {
+            "description": "RFC 3339 UTC, second precision",
+            "type": "string"
+          },
+          "derived_from": {
+            "description": "Artifact ids in this same document. The resulting graph must be acyclic.",
+            "items": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "path": {
+            "description": "Relative; must not be absolute or contain '..'.",
+            "pattern": "^(?!/)(?!.*\\.\\.).*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "capabilities": {
+      "properties": {
+        "granted": {
+          "items": {
+            "description": "Grants may end in '.*' to cover a namespace.",
+            "pattern": "^(\\*|[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*(\\.\\*)?)$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "optional": {
+          "items": {
+            "description": "Dotted capability name. Requirements must not contain wildcards.",
+            "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requires": {
+          "items": {
+            "description": "Dotted capability name. Requirements must not contain wildcards.",
+            "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "context": {
+      "items": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string"
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "environment": {
+      "properties": {
+        "arch": {
+          "type": "string"
+        },
+        "env_var_names": {
+          "description": "Names only. Values must never be captured.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "git_commit": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "runtime_version": {
+          "type": "string"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workspace_digest": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "events": {
+      "items": {
+        "properties": {
+          "data": {
+            "type": "object"
+          },
+          "seq": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ts": {
+            "description": "RFC 3339 UTC, second precision",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "execution": {
+      "properties": {
+        "current_task": {
+          "type": "string"
+        },
+        "cursor": {
+          "description": "Adapter-defined resumption pointer. Readers must preserve it and must not interpret it.",
+          "type": "object"
+        },
+        "pending_tasks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "suspended",
+            "blocked",
+            "completed",
+            "failed"
+          ]
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "format_version": {
+      "examples": [
+        "0.1"
+      ],
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "type": "string"
+    },
+    "identity": {
+      "properties": {
+        "agent_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "RFC 3339 UTC, second precision",
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id"
+      ],
+      "type": "object"
+    },
+    "lineage": {
+      "properties": {
+        "fork_label": {
+          "type": "string"
+        },
+        "forked_from": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parent": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "root": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "memory": {
+      "items": {
+        "properties": {
+          "attributes": {
+            "type": "object"
+          },
+          "content": {
+            "type": "string"
+          },
+          "created_at": {
+            "description": "RFC 3339 UTC, second precision",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "importance": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "kind": {
+            "enum": [
+              "working",
+              "episodic",
+              "semantic",
+              "procedural",
+              "external-reference"
+            ]
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "transformed": {
+            "description": "True when this entry summarizes other state rather than recording an observation. Producers must set it on generated summaries.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "content"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "objective": {
+      "properties": {
+        "constraints": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "success_criteria": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "provider": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "opaque": {
+          "description": "Provider-side state that does not survive migration to a different provider. Nothing the agent needs to function may live here.",
+          "type": "object"
+        },
+        "params": {
+          "type": "object"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "runtime_opaque": {
+      "description": "Adapter-private state. Dropped when the adapter changes.",
+      "type": "object"
+    }
+  },
+  "required": [
+    "format_version",
+    "identity"
+  ],
+  "title": "Continuum Agent State",
+  "type": "object"
+}

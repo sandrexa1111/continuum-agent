@@ -7,7 +7,40 @@ tracked separately and currently sits at `0.1`.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`continuum-langgraph`** — an adapter for [LangGraph](https://github.com/langchain-ai/langgraph),
+  published as a **separate package** so core keeps its zero-dependency
+  guarantee. Discovered through the `continuum.adapters` entry point with no
+  change to Continuum core, which is the point: the adapter interface is now
+  demonstrated rather than asserted.
+- **Cross-runtime interoperability demonstration**
+  (`packages/continuum-langgraph/examples/interop_demo.py`) — a LangGraph agent
+  stopped mid-graph, exported, inspected by core tooling with `langgraph` never
+  imported, and resumed to completion in a fresh runtime with a new
+  checkpointer. Runs offline. Two of its six scenes are refusals.
+- **`spec/agent-state.schema.json`** — the JSON Schema promised in the roadmap.
+  Hand-written against the prose spec rather than reflected off the dataclasses,
+  so it can disagree with the implementation; CI regenerates and diffs it, and
+  20 tests validate real states against it.
+- **Graph fingerprinting** — a Continuum image carries agent state, not the
+  program that produced it. Export records the graph's node and edge sets and
+  import refuses a topology mismatch, turning a documented limitation into a
+  checkable one.
+- CI jobs asserting that core gains no runtime dependencies, that the adapter is
+  discovered without core changes, and that the schema has not drifted.
+
+### Fixed
+
+Two defects in the adapter, both found by its own conformance tests:
+
+- **Reducer channels duplicated on import.** LangGraph applies channel reducers
+  on `update_state`, so writing an accumulated value into a non-empty thread
+  appended it to itself and silently doubled the agent's memory. `import_state`
+  now clears the destination thread first.
+- **Stale execution frontier after a resumed step.** Reading graph state while
+  the update stream was still suspended returned a stale `next`, so every step
+  after the first claimed the graph had finished while a node was still pending.
 
 ## [0.1.0] — 2026-08-11
 

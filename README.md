@@ -273,6 +273,33 @@ my-framework = "my_package.adapter:MyAdapter"
 The protocol is checked structurally, so your class does not have to inherit
 from or import anything of ours.
 
+### Proof that this works
+
+[`continuum-langgraph`](packages/continuum-langgraph/) is an adapter for
+[LangGraph](https://github.com/langchain-ai/langgraph) — an independently
+developed framework with its own checkpointing model that does not match
+Continuum's.
+
+```bash
+pip install -e ./packages/continuum-langgraph
+continuum adapters                      # langgraph now listed; core unchanged
+python packages/continuum-langgraph/examples/interop_demo.py
+```
+
+The demonstration runs offline and shows a LangGraph agent stopped mid-graph,
+exported, inspected by core tooling with `langgraph` never imported, and resumed
+to completion in a fresh runtime with a new checkpointer — plus the two refusals
+that matter: what the migration report drops, and a resume into a graph with
+different topology.
+
+It is installed as a **separate package**, so core keeps its zero-dependency
+guarantee. CI asserts that: a job fails the build if `continuum-agent` ever
+gains a runtime dependency.
+
+Writing it also found two real defects — reducer channels duplicating on import,
+and a stale execution frontier after a resumed step — both now regression-tested
+and [written up](packages/continuum-langgraph/README.md#two-bugs-this-package-found).
+
 ---
 
 ## Project structure
@@ -292,9 +319,12 @@ src/continuum/
 ├── adapters/        the adapter protocol + a model-free reference runtime
 └── cli.py           the command line
 
-spec/                the format, normatively
+packages/
+└── continuum-langgraph/   an independent adapter, installed separately
+
+spec/                the format, normatively (+ agent-state.schema.json)
 docs/adr/            why the load-bearing decisions went the way they did
-tests/               244 tests
+tests/               264 tests, plus 32 in the adapter package
 ```
 
 ---
@@ -360,8 +390,12 @@ Stated plainly, because a state format that oversells itself is worse than none.
   versioned separately and is the part intended to stay readable.
 - **No model internals.** Provider-side conversation handles, cached prefixes,
   and attention state do not move. Migration reports them as UNAVAILABLE.
-- **One shipped adapter.** The reference runtime. Adapters for real frameworks
-  are the obvious next work; none are claimed as tested until they exist.
+- **Two shipped adapters.** The reference runtime, and
+  [LangGraph](packages/continuum-langgraph/) — tested against LangGraph 1.2 and
+  no other version. Other frameworks are unclaimed until someone runs them.
+- **Cross-framework *resume* is not claimed.** A LangGraph frontier means
+  nothing to another runtime. Cross-framework *inspection and analysis* is
+  claimed and demonstrated.
 - **Token counts are estimates** unless you supply a tokenizer. The built-in
   estimator is deliberately pessimistic.
 - **The secret scanner finds accidents, not adversaries.** A credential with no
@@ -380,8 +414,7 @@ Stated plainly, because a state format that oversells itself is worse than none.
 
 Only work that is actually intended:
 
-- adapters for one or two real agent frameworks, tested rather than claimed
-- an `AgentState` JSON Schema published alongside the spec
+- more framework adapters, tested rather than claimed
 - store-level garbage collection for unreachable objects
 - optional image encryption (the manifest already supports selective export)
 - multi-writer coordination

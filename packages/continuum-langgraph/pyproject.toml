@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "continuum-langgraph"
+version = "0.1.0"
+description = "Checkpoint, export, migrate and resume LangGraph agents through Continuum's portable state format."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "sandromosi" }]
+keywords = ["langgraph", "continuum", "agents", "checkpoint", "interoperability"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+# Framework dependencies live here, never in continuum-agent. Core stays at
+# zero runtime dependencies; see continuum-agent/docs/adr/002-zero-dependencies.md
+dependencies = [
+  "continuum-agent>=0.1.0",
+  "langgraph>=0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+# Discovery without touching Continuum core -- the interface test from
+# continuum-agent/spec/adapters.md section 2.
+[project.entry-points."continuum.adapters"]
+langgraph = "continuum_langgraph.adapter:factory"
+
+[project.urls]
+Homepage = "https://github.com/sandrexa1111/continuum-agent"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/continuum_langgraph"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
