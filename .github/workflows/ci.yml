@@ -118,18 +118,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: every relative markdown link must point at a real file
-        run: |
-          set -euo pipefail
-          fail=0
-          while IFS= read -r -d '' file; do
-            grep -oE '\]\([^)#][^)]*\)' "$file" 2>/dev/null | sed -E 's/^\]\(//; s/\)$//' \
-            | grep -vE '^(https?|mailto):' | while read -r link; do
-                target="$(dirname "$file")/${link%%#*}"
-                if [ ! -e "$target" ]; then
-                  echo "::error file=$file::broken link -> $link"
-                  exit 1
-                fi
-              done || fail=1
-          done < <(find . -name '*.md' -not -path './.git/*' -print0)
-          test "$fail" -eq 0
+        run: python scripts/check_links.py
