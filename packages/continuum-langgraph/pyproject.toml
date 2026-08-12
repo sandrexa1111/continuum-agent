@@ -5,11 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "continuum-langgraph"
 version = "0.1.0"
-description = "Checkpoint, export, migrate and resume LangGraph agents through Continuum's portable state format."
+description = "LangGraph adapter for Continuum's portable agent-state format."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "sandromosi" }]
+authors = [{ name = "Alexandre Mosiashvili" }]
 keywords = ["langgraph", "continuum", "agents", "checkpoint", "interoperability"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -30,8 +30,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
 
-# Discovery without touching Continuum core -- the interface test from
-# continuum-agent/spec/adapters.md section 2.
 [project.entry-points."continuum.adapters"]
 langgraph = "continuum_langgraph.adapter:factory"
 
