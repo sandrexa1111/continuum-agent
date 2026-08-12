@@ -5,11 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "continuum-agent"
 version = "0.1.0"
-description = "Checkpoint, fork, migrate and resume long-lived AI agents through a portable, content-addressed state format."
+description = "Portable checkpointing and state migration for long-lived agent runtimes."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "sandromosi" }]
+authors = [{ name = "Alexandre Mosiashvili" }]
 keywords = ["agents", "checkpoint", "state", "serialization", "content-addressed", "provenance"]
 classifiers = [
   "Development Status :: 3 - Alpha",
