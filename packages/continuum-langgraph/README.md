@@ -1,150 +1,121 @@
 # continuum-langgraph
 
-A [Continuum](https://github.com/sandrexa1111/continuum-agent) adapter for
-[LangGraph](https://github.com/langchain-ai/langgraph).
+LangGraph adapter for [Continuum](../../README.md).
 
-Checkpoint a running LangGraph agent, export it to a portable `.asi` image, move
-it, and resume it in a completely fresh runtime.
+The package demonstrates that Continuum's adapter boundary works with an independently developed runtime: a LangGraph execution can be stopped mid-graph, exported through Continuum, inspected as portable state, and resumed in a fresh LangGraph runtime with a new checkpointer.
+
+> **Status:** experimental `v0.1.0`. Tested against the LangGraph version used by this repository's CI.
+
+## Install from this repository
+
+From the `continuum-agent` repository root:
 
 ```bash
-pip install continuum-langgraph
-python examples/interop_demo.py     # runs offline: no model, no key, no network
+pip install -e .
+pip install -e ./packages/continuum-langgraph
 ```
 
-## Why this package exists
+Then run the offline interoperability demonstration:
 
-Continuum's central claim is that its adapter interface is real — that a runtime
-nobody wrote for Continuum can be checkpointed through it without changing
-Continuum core. A project can assert that; only a second, independent adapter
-demonstrates it.
+```bash
+python packages/continuum-langgraph/examples/interop_demo.py
+```
 
-LangGraph is a fair test. It is independently developed, has its own
-checkpointing model that does *not* match Continuum's, keeps genuinely
-non-portable state, and runs deterministically with plain Python nodes so the
-whole demonstration stays offline.
+The demo uses deterministic Python nodes; it does not require a model, API key, or network call.
 
-Two structural facts back the claim up:
+## What this adapter proves
 
-- This package is **installed separately**. Continuum core has zero runtime
-  dependencies and still does; `langgraph` and its tree live behind this
-  boundary.
-- It is discovered through the `continuum.adapters` entry point, so it appears
-  in `continuum adapters` with **no change to Continuum core**.
+`continuum-langgraph` is installed separately from Continuum core.
 
-## What travels, and what does not
+- `continuum-agent` keeps zero runtime dependencies
+- LangGraph is only required by this adapter package
+- the adapter is discovered through the `continuum.adapters` entry point
+- Continuum core does not need framework-specific code
+- exported state can be imported into a fresh LangGraph runtime rather than handed back to the original object
 
-| | Where it lands | Survives a move to another runtime? |
+CI checks these boundaries.
+
+## State mapping
+
+A LangGraph state contains both application-level data and framework-specific execution information. The adapter keeps those categories explicit.
+
+| State | Continuum representation | Portability |
 |---|---|---|
-| Objective, memory, artifacts (channels named in a `GraphBinding`) | portable model sections | **Yes** — readable by any runtime |
-| Remaining channel values, `next` frontier, resume node | `execution.cursor` | Preserved, but only LangGraph can interpret it |
-| `thread_id`, `checkpoint_id`, `checkpoint_ns` | `provider.opaque` | **No** — dropped and named in the report |
-| `versions_seen`, pending task ids, graph fingerprint | `runtime_opaque` | **No** — dropped when the adapter changes |
-| The graph itself | *not in the state at all* | **No** — see below |
+| bound objective, memory and artifact channels | portable state sections | readable without LangGraph |
+| remaining channel values and execution frontier | `execution.cursor` | preserved, but LangGraph-specific |
+| thread/checkpoint identifiers | provider-specific metadata | not portable; reported as dropped |
+| graph/runtime bookkeeping | runtime-specific metadata | adapter-specific |
+| graph program itself | not stored in the state image | destination must provide it |
 
-**The graph is not in the image.** A Continuum image carries what the agent
-knows, not the program that was running it, so the destination must already have
-the same graph compiled. Rather than leave that as a footnote, export records a
-fingerprint of the node and edge sets and import refuses a mismatch:
+## Graph compatibility
 
-```text
-REFUSED: graph topology mismatch: the checkpoint was taken from a different graph.
-  destination graph is missing node(s): ['extract']
-  destination graph is missing edge(s): [('extract', 'rank'), ('scan', 'extract')]
-Continuum images carry agent state, not the program. Compile the same graph at
-the destination.
-```
+A Continuum image carries execution state, not executable graph code.
 
-**Cross-framework resume is not claimed.** A LangGraph frontier is meaningless
-to another runtime. Cross-framework *inspection and analysis* is claimed, and
-works — core Continuum reads the objective, memory, artifacts and event history
-of a LangGraph image with `langgraph` never imported.
+The adapter fingerprints the graph topology when exporting. Import refuses a destination graph with a different node/edge structure instead of attempting to resume against an incompatible program.
 
-## Usage
+This is intentional: cross-framework **inspection and analysis** of portable state is supported, while cross-framework execution resume is not claimed.
 
-```python
-from continuum_langgraph import GraphBinding, LangGraphAdapter
-
-binding = GraphBinding(
-    goal_channel="goal",  # -> objective.goal
-    memory_channels=("findings",),  # -> portable memory entries
-)
-
-agent = LangGraphAdapter(build_graph, thread_id="run-1", binding=binding)
-agent.start({"goal": "review the corpus", "findings": [], "stage": "scan"})
-agent.step()
-agent.step()
-
-state = agent.export_state()  # a normal Continuum AgentState
-```
-
-`build_graph` returns an *uncompiled* `StateGraph`. The adapter compiles it with
-its own checkpointer, which is what lets a state exported from one process be
-imported into a genuinely fresh runtime rather than handed back to the object
-that produced it.
-
-Then, anywhere:
+## Basic usage
 
 ```python
 from continuum import read_image
+from continuum_langgraph import GraphBinding, LangGraphAdapter
 
-destination = LangGraphAdapter(build_graph, thread_id="other-host", binding=binding)
+binding = GraphBinding(
+    goal_channel="goal",
+    memory_channels=("findings",),
+)
+
+source = LangGraphAdapter(
+    build_graph,
+    thread_id="run-1",
+    binding=binding,
+)
+source.start({"goal": "review the corpus", "findings": [], "stage": "scan"})
+source.step()
+source.step()
+
+state = source.export_state()
+```
+
+At a destination with the same graph definition:
+
+```python
+destination = LangGraphAdapter(
+    build_graph,
+    thread_id="run-2",
+    binding=binding,
+)
 destination.import_state(read_image("agent.asi").state)
 destination.run_to_completion()
 ```
 
-### GraphBinding
+`GraphBinding` is explicit because Continuum should not guess which arbitrary LangGraph channel represents an objective, memory, or artifact. Unbound channels remain available in the framework-specific execution cursor.
 
-A `StateGraph` is a bag of typed channels. Continuum cannot guess which one is
-the objective and which is a scratch counter, and guessing wrong is worse than
-not guessing — a channel silently mapped to `memory` would travel to another
-runtime carrying a meaning nobody intended. So the mapping is declared.
+## Conformance issues caught during implementation
 
-Channels not named in a binding are still captured; they land in
-`execution.cursor`, which the format explicitly does not interpret.
+The adapter tests exposed two framework-integration bugs that are now regression-tested:
 
-## Two bugs this package found
-
-Both were caught by the conformance tests, and both have regression tests that
-explain themselves:
-
-**Reducer channels duplicated on import.** `findings: Annotated[list, operator.add]`
-means LangGraph applies the reducer on `update_state`, so writing an accumulated
-value back into a thread that already holds it appends it to itself and silently
-doubles the agent's memory. It hid at first because the interop path imports into
-a *fresh* thread, where the channel is empty and `[] + values == values`. Only
-the round-trip conformance check exposed it. `import_state` now clears the
-destination thread first — importing means "become this state", not "merge into
-whatever is already here".
-
-**A stale frontier after a resumed step.** Reading `get_state` while the update
-stream was still suspended returned a stale `next` on the resume path: the first
-step reported correctly and every later one claimed the graph had finished while
-a node was still pending. The stream is now closed before the frontier is read.
+1. **Reducer-channel duplication.** Importing accumulated reducer state into a non-empty thread could append the data to itself instead of replacing the destination state. Import now clears the destination thread where supported before restoration.
+2. **Stale execution frontier.** Reading graph state while an update stream was still suspended could report an outdated `next` frontier. The stream is closed before the adapter reads the stable frontier.
 
 ## Limitations
 
-- **Channel values must be JSON-encodable.** Continuum rejects anything without
-  a stable encoding, deliberately. Unknown types are stringified rather than
-  allowed to fail at digest time, which means such a channel round-trips as
-  text, not as its original object.
-- **Ambiguous resume points.** When the frontier has several predecessors that
-  all ran — a diamond — the resume node cannot be determined from topology and
-  `versions_seen` alone. The adapter records nothing rather than guessing.
-- **Tested against LangGraph 1.2.** Earlier and later versions are not claimed
-  until they are actually run.
-- **`interrupt`/`Command` resumption is not modelled.** Human-in-the-loop
-  interrupts carry state this adapter does not currently capture.
+- Channel values need a stable serializable representation. Unknown objects may lose type information.
+- The destination must provide a compatible graph program.
+- Some graph shapes have ambiguous resume points; the adapter refuses to guess when topology and checkpoint metadata are insufficient.
+- Provider/checkpointer identifiers are intentionally not treated as portable state.
+- Cross-framework resume is outside the current claim.
 
 ## Development
 
+From the repository root:
+
 ```bash
-pip install -e ".[dev]"
-pytest        # 32 tests: conformance, regression, migration, discovery
+pip install -e .
+pip install -e "./packages/continuum-langgraph[dev]"
+pytest packages/continuum-langgraph/tests -q
+python packages/continuum-langgraph/examples/interop_demo.py
 ```
 
-The conformance class walks the checklist in
-[`spec/adapters.md`](../../spec/adapters.md) section 4 point by point.
-
-## License
-
-Apache-2.0, same as Continuum.
+The adapter package currently has 32 tests in addition to Continuum core's test suite.
